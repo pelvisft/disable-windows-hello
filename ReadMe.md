@@ -1,4 +1,4 @@
-# Windows Hello Nuker
+# Windows Hello Disabler
 
 ## Overview
 
