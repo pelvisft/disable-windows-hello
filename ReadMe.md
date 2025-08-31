@@ -19,7 +19,7 @@ The method was discovered by stormpike.
 This script is designed as a one-liner for easy copy-paste execution directly in PowerShell.
 
 1. **Open PowerShell as Administrator**: Right-click on PowerShell and select "Run as administrator".
-2. **Copy the Script**: Open `1liner.ps1` and copy its entire content (the single line of code).
+2. **Copy the Script**: Copy the content from [disablewh.ps1](https://raw.githubusercontent.com/pelvisft/disable-windows-hello/refs/heads/main/disablewh.ps1).
 3. **Paste and Execute**: Paste the copied code into the PowerShell window and press Enter.
 4. **Restart Your Computer**: Follow the on-screen prompt to restart and apply the changes.
 
