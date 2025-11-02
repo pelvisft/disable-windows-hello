@@ -7,7 +7,8 @@
     Disables Windows Hello biometric authentication by modifying registry settings.
     If unsuccessful, virtualization must be disabled in BIOS.
 .NOTES
-    Credits: stormpike
+    Author: pelvis
+    Method discovered by: stormpike
     Version: 2.0
     Requires: Administrator privileges, Windows 11
 #>
@@ -122,7 +123,7 @@ function Disable-WindowsHello {
 #region Main Script
 
 Write-Host "`n=== Windows Hello Disabler ===" -ForegroundColor Cyan
-Write-Host "Version 2.0 by stormpike`n" -ForegroundColor Gray
+Write-Host "Version 2.0`n" -ForegroundColor Gray
 
 # Check admin privileges
 if (-not (Test-AdminPrivileges)) {
@@ -135,7 +136,7 @@ if (-not (Test-AdminPrivileges)) {
     exit 1
 }
 
-Write-Host "[✓] Administrator privileges confirmed" -ForegroundColor Green
+Write-Host "[OK] Administrator privileges confirmed" -ForegroundColor Green
 
 # Check Windows 11
 if (-not (Test-Windows11)) {
@@ -148,18 +149,18 @@ if (-not (Test-Windows11)) {
     exit 1
 }
 
-Write-Host "[✓] Windows 11 detected" -ForegroundColor Green
+Write-Host "[OK] Windows 11 detected" -ForegroundColor Green
 
 # Attempt to disable Windows Hello
 Write-Host "`nDisabling Windows Hello..." -ForegroundColor Yellow
 
 if (Disable-WindowsHello) {
     Show-MessageBox `
-        -Message "Windows Hello has been successfully disabled!`n`n✓ Registry modification complete`n`nPlease restart your computer for changes to take effect.`n`nNote: If Windows Hello still appears after restart, you'll need to disable virtualization in your BIOS settings.`n`n- Method by stormpike" `
+        -Message "Windows Hello has been successfully disabled!`n`n[OK] Registry modification complete`n`nPlease restart your computer for changes to take effect.`n`nNote: If Windows Hello still appears after restart or if the loader still prompts the same error, you'll need to disable virtualization in your BIOS settings.`n`n- Method by stormpike" `
         -Title "Success!" `
         -Icon Information
     
-    Write-Host "`n[✓] Windows Hello disabled successfully!" -ForegroundColor Green
+    Write-Host "`n[OK] Windows Hello disabled successfully!" -ForegroundColor Green
     Write-Host "[!] A restart is required for changes to take effect`n" -ForegroundColor Yellow
     
     # Prompt user to restart
@@ -177,7 +178,7 @@ if (Disable-WindowsHello) {
         
         shutdown /r /t 10 /c "Restarting to apply Windows Hello disable changes" /d p:4:1
         
-        Write-Host "[✓] Restart scheduled" -ForegroundColor Green
+        Write-Host "[OK] Restart scheduled" -ForegroundColor Green
     }
     else {
         Write-Host "[!] Remember to restart your computer manually" -ForegroundColor Yellow
