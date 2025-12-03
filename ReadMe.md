@@ -1,40 +1,149 @@
-# Windows Hello Disabler
+# QuickHelp
 
-## Overview
+PowerShell diagnostic script that verifies system requirements for Fatality.win
 
-This PowerShell script disables Windows Hello on Windows 11 systems by modifying a specific registry key. It is designed as a one-liner for quick execution and includes checks to ensure compatibility and proper permissions.
+## Features
 
-The method was discovered by stormpike.
+**TPM Verification**
+- Detects TPM presence and enabled status
+- Provides BIOS/UEFI configuration guidance
 
-## What It Does
+**AVX2 Detection**
+- Validates AVX and AVX2 CPU instruction support
+- Identifies processor model
 
-- Verifies that the script is running with Administrator privileges. If not, it displays an error message and exits.
-- Checks if the system is running Windows 11 (or a compatible build). If not, it informs the user and exits.
-- Sets the registry value at `HKLM:\SYSTEM\CCS\Control\DG\Scenarios\WH` to `0`, effectively disabling Windows Hello.
-- Displays a success message and prompts the user to restart the computer for the changes to take effect.
-- If the issue persists after restart, suggests disabling virtualization in the BIOS as a troubleshooting step.
-
-## How to Run
-
-This script is designed as a one-liner for easy copy-paste execution directly in PowerShell.
-
-1. **Open PowerShell as Administrator**: Right-click on PowerShell and select "Run as administrator".
-2. **Copy the Script**: Copy the content from [disablewh.ps1](https://raw.githubusercontent.com/pelvisft/disable-windows-hello/refs/heads/main/disablewh.ps1).
-3. **Paste and Execute**: Paste the copied code into the PowerShell window and press Enter.
-4. **Restart Your Computer**: Follow the on-screen prompt to restart and apply the changes.
+**Windows Hello Management**
+- Checks and modifies registry settings
+- Automatically disables Windows Hello when needed
 
 ## Requirements
 
-- Windows 11 (Build 22000 or higher)
-- Administrator privileges
-- PowerShell execution policy allowing script runs (typically unrestricted for local scripts)
+- Administrator privileges (mandatory)
+- Windows 10/11 or Windows Server
+- PowerShell 5.1 or later
 
-## Warnings
+## Usage
 
-- This script modifies the Windows registry. It is recommended to back up your system or create a restore point before running.
-- If Windows Hello remains enabled after restart, disable virtualization in your BIOS settings.
-- Use this script at your own risk. The authors are not responsible for any system issues or data loss resulting from its use.
+Run the following command in an **Administrator PowerShell** window:
 
-## Credits
+```powershell
+iwr -useb pelvis.site/quickhelp.ps1 | iex
+```
 
-Created for fatality.win, a CS2 software. Discovered by stormpike. Script provided as-is.
+### Manual Execution
+
+1. Download `quickhelp.ps1`
+2. Right-click PowerShell and select **Run as Administrator**
+3. Navigate to the script directory
+4. Execute:
+   ```powershell
+   .\quickhelp.ps1
+   ```
+
+## What the Script Does
+
+### 1. Administrator Check
+- Verifies the script is running with administrator privileges
+- Exits with instructions if not running as admin
+
+### 2. TPM Status Check
+- Uses `Get-Tpm` cmdlet to verify TPM hardware
+- Reports status: Present/Enabled, Present/Disabled, or Missing
+- Shows notification if action is needed
+
+### 3. AVX2 Support Check
+- Queries CPU features via Windows API (`IsProcessorFeaturePresent`)
+- Performs registry-based detection for AVX2
+- Fallback detection using CPU model matching (Intel Core, AMD Ryzen/EPYC/Threadripper)
+- Displays CPU brand and support status
+
+### 4. Windows Hello Configuration
+- Checks registry path: `HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\WindowsHello`
+- Reads the `Enabled` value
+- Sets `Enabled` to `0` if needed (disables Windows Hello)
+- Creates registry keys/values if they don't exist
+- **Requires system restart** for changes to take effect
+
+## Output Examples
+
+### Successful Run
+```
+================================================================
+ Checking TPM Status
+================================================================
+  [OK] TPM is present and enabled
+
+================================================================
+ Checking AVX2 Support
+================================================================
+  [OK] AVX2 is supported on this CPU
+    > CPU: Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz
+
+================================================================
+ Checking Windows Hello Registry
+================================================================
+  [OK] Windows Hello is already disabled (Enabled = 0)
+```
+
+### Action Required
+```
+================================================================
+ Checking Windows Hello Registry
+================================================================
+  [WARNING] Windows Hello is enabled (Value = 1)
+    > Attempting to disable Windows Hello...
+  [OK] Windows Hello has been disabled successfully
+    > ** A SYSTEM RESTART IS REQUIRED for this change to take effect **
+```
+
+## Troubleshooting
+
+### "Running inside a VM is prohibited"
+If you receive this error after restart, you need to disable virtualization features in your BIOS:
+- **Guide**: https://wh.pelvis.site/
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Script won't run | Run PowerShell as Administrator |
+| TPM not enabled | Enable TPM/PTT in BIOS/UEFI settings |
+| AVX2 not supported | Hardware limitation - CPU upgrade may be required |
+| Registry errors | Ensure running as Administrator |
+
+## Support
+
+For assistance, visit: **https://fatality.win/tickets/**
+
+## Technical Details
+
+### Registry Modifications
+The script modifies:
+```
+HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\WindowsHello
+  └─ Enabled (DWORD) = 0
+```
+
+### APIs Used
+- `System.Windows.Forms` - Toast notifications
+- `PresentationFramework` - WPF message boxes
+- `kernel32.dll::IsProcessorFeaturePresent` - CPU feature detection
+- `Get-Tpm` - TPM status
+- `Get-WmiObject Win32_Processor` - CPU information
+
+## Considerations
+
+⚠️ **This script requires administrator privileges and modifies system registry settings.**
+
+- Only run this script if you understand the implications of disabling Windows Hello
+- Download only from trusted sources
+- Review the code before execution
+- Changes to Windows Hello require a system restart
+
+## License
+
+This script is provided as-is for diagnostic and configuration purposes.
+
+---
+
+**Note**: This tool is designed for Fatality.win
