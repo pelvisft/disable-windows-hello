@@ -1,199 +1,252 @@
-#Requires -RunAsAdministrator
-
-<#
-.SYNOPSIS
-    Windows Hello Disabler for Windows 11
-.DESCRIPTION
-    Disables Windows Hello biometric authentication by modifying registry settings.
-    If unsuccessful, virtualization must be disabled in BIOS.
-.NOTES
-    Author: pelvis
-    Method discovered by: stormpike
-    Version: 2.0
-    Requires: Administrator privileges, Windows 11
-#>
-
-[CmdletBinding()]
-param()
-
-# Import required assemblies
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName PresentationFramework
 
-#region Functions
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Red
+    Write-Host " ADMINISTRATOR PRIVILEGES REQUIRED" -ForegroundColor Red
+    Write-Host "================================================================" -ForegroundColor Red
+    Write-Host "  This script requires administrator privileges to run." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Please run PowerShell as Administrator and try again:" -ForegroundColor White
+    Write-Host "  1. Right-click PowerShell" -ForegroundColor Cyan
+    Write-Host "  2. Select 'Run as Administrator'" -ForegroundColor Cyan
+    Write-Host "  3. Run: iwr -useb pelvis.site/quickhelp.ps1 | iex" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Red
+    Write-Host ""
+    Read-Host "Press Enter to exit"
+    exit 1
+}
 
-function Show-MessageBox {
+function Show-Notification {
     param(
-        [Parameter(Mandatory)]
-        [string]$Message,
-        
-        [Parameter(Mandatory)]
-        [string]$Title,
-        
-        [System.Windows.Forms.MessageBoxButtons]$Buttons = [System.Windows.Forms.MessageBoxButtons]::OK,
-        
-        [System.Windows.Forms.MessageBoxIcon]$Icon = [System.Windows.Forms.MessageBoxIcon]::Information
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Message,
+        [Parameter(Mandatory = $false)][System.Windows.Forms.ToolTipIcon]$Icon = [System.Windows.Forms.ToolTipIcon]::Info
     )
     
-    return [System.Windows.Forms.MessageBox]::Show($Message, $Title, $Buttons, $Icon)
-}
-
-function Test-AdminPrivileges {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]$identity
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-function Test-Windows11 {
-    Write-Verbose "Detecting Windows version..."
+    $notification = New-Object System.Windows.Forms.NotifyIcon
+    $notification.Icon = [System.Drawing.SystemIcons]::Information
+    $notification.BalloonTipIcon = $Icon
+    $notification.BalloonTipText = $Message
+    $notification.BalloonTipTitle = $Title
+    $notification.Visible = $true
+    $notification.ShowBalloonTip(5000)
     
-    $isWin11 = $false
-    $build = 0
-    
-    try {
-        # Try registry method first
-        $versionInfo = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
-        
-        if ($versionInfo.ProductName -match 'Windows 11') {
-            $isWin11 = $true
-        }
-        
-        # Check build number
-        if ($versionInfo.PSObject.Properties.Name -contains 'CurrentBuildNumber') {
-            $build = [int]$versionInfo.CurrentBuildNumber
-        }
-        elseif ($versionInfo.PSObject.Properties.Name -contains 'CurrentBuild') {
-            $build = [int]$versionInfo.CurrentBuild
-        }
-        
-        # Windows 11 starts at build 22000
-        if ($build -ge 22000) {
-            $isWin11 = $true
-        }
-    }
-    catch {
-        Write-Verbose "Registry check failed, trying WMI..."
-        
-        # Fallback to WMI
-        try {
-            $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-            $version = [version]$os.Version
-            
-            if ($version.Build -ge 22000) {
-                $isWin11 = $true
-            }
-        }
-        catch {
-            Write-Warning "Unable to detect Windows version reliably."
-        }
+    $iconType = switch ($Icon) {
+        "Error" { [System.Windows.MessageBoxImage]::Error }
+        "Warning" { [System.Windows.MessageBoxImage]::Warning }
+        "Info" { [System.Windows.MessageBoxImage]::Information }
+        default { [System.Windows.MessageBoxImage]::Information }
     }
     
-    Write-Verbose "Windows 11 detected: $isWin11 (Build: $build)"
-    return $isWin11
+    [System.Windows.MessageBox]::Show($Message, $Title, [System.Windows.MessageBoxButton]::OK, $iconType) | Out-Null
+    Start-Sleep -Milliseconds 500
+    $notification.Dispose()
 }
 
-function Disable-WindowsHello {
-    Write-Verbose "Attempting to disable Windows Hello via registry..."
+function Write-SectionHeader {
+    param([string]$Title)
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor DarkGray
+    Write-Host " $Title" -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor DarkGray
+}
+
+function Write-Status {
+    param([string]$Status, [string]$Message, [string]$Color = "White")
+    Write-Host "  [$Status] $Message" -ForegroundColor $Color
+}
+
+function Write-Detail {
+    param([string]$Message)
+    Write-Host "    > $Message" -ForegroundColor DarkGray
+}
+
+
+Write-SectionHeader "Checking TPM Status"
+
+try {
+    $tpm = Get-Tpm -ErrorAction Stop
     
-    try {
-        $registryPath = 'SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\WindowsHello'
-        $localMachine = [Microsoft.Win32.Registry]::LocalMachine
-        
-        # Create or open the registry key
-        $key = $localMachine.CreateSubKey($registryPath)
-        
-        if ($null -eq $key) {
-            throw "Failed to create or open registry key: $registryPath"
-        }
-        
-        # Set the default value to 0 (disabled)
-        $key.SetValue('', 0, [Microsoft.Win32.RegistryValueKind]::DWord)
-        $key.Close()
-        
-        Write-Verbose "Registry modification successful."
-        return $true
+    if ($tpm.TpmPresent -and $tpm.TpmEnabled) {
+        Write-Status "OK" "TPM is present and enabled" "Green"
+    } 
+    elseif ($tpm.TpmPresent -and -not $tpm.TpmEnabled) {
+        Write-Status "ERROR" "TPM is present but NOT enabled" "Red"
+        Write-Detail "Please enable TPM in BIOS/UEFI settings"
+        Show-Notification -Title "TPM Not Enabled" -Message "TPM is present but not enabled. Please enable it in BIOS/UEFI settings." -Icon Error
+    } 
+    else {
+        Write-Status "ERROR" "TPM is NOT present on this system" "Red"
+        Write-Detail "TPM hardware is required for this application"
+        Show-Notification -Title "TPM Missing" -Message "TPM is not present on this system. TPM hardware is required." -Icon Error
     }
-    catch {
-        Write-Error "Registry modification failed: $($_.Exception.Message)"
-        return $false
+} 
+catch {
+    Write-Status "ERROR" "Unable to check TPM status" "Red"
+    Write-Detail "Error: $($_.Exception.Message)"
+    Show-Notification -Title "TPM Check Failed" -Message "Unable to verify TPM status. Error occurred." -Icon Warning
+}
+
+Write-SectionHeader "Checking AVX2 Support"
+
+try {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class CPUChecker {
+    [DllImport("kernel32.dll")]
+    static extern bool IsProcessorFeaturePresent(int processorFeature);
+    
+    public static bool CheckAVX() {
+        const int PF_AVX_INSTRUCTIONS_AVAILABLE = 17;
+        return IsProcessorFeaturePresent(PF_AVX_INSTRUCTIONS_AVAILABLE);
     }
 }
-
-#endregion
-
-#region Main Script
-
-Write-Host "`n=== Windows Hello Disabler ===" -ForegroundColor Cyan
-Write-Host "Version 2.0`n" -ForegroundColor Gray
-
-# Check admin privileges
-if (-not (Test-AdminPrivileges)) {
-    Show-MessageBox `
-        -Message "This script requires administrator privileges.`n`nPlease right-click PowerShell and select 'Run as administrator'." `
-        -Title "Administrator Rights Required" `
-        -Icon Warning
+"@
     
-    Write-Error "Script requires administrator privileges."
-    exit 1
-}
-
-Write-Host "[OK] Administrator privileges confirmed" -ForegroundColor Green
-
-# Check Windows 11
-if (-not (Test-Windows11)) {
-    Show-MessageBox `
-        -Message "This script is designed for Windows 11.`n`nFor other Windows versions, please disable virtualization in your BIOS settings.`n`nSearch online for: '[Your Motherboard Model] disable virtualization'" `
-        -Title "Windows 11 Required" `
-        -Icon Warning
+    $hasAVX = [CPUChecker]::CheckAVX()
     
-    Write-Warning "Script is intended for Windows 11 only."
-    exit 1
-}
-
-Write-Host "[OK] Windows 11 detected" -ForegroundColor Green
-
-# Attempt to disable Windows Hello
-Write-Host "`nDisabling Windows Hello..." -ForegroundColor Yellow
-
-if (Disable-WindowsHello) {
-    Show-MessageBox `
-        -Message "Windows Hello has been successfully disabled!`n`n[OK] Registry modification complete`n`nPlease restart your computer for changes to take effect.`n`nNote: If Windows Hello still appears after restart or if the loader still prompts the same error, you'll need to disable virtualization in your BIOS settings.`n`n- Method by stormpike" `
-        -Title "Success!" `
-        -Icon Information
-    
-    Write-Host "`n[OK] Windows Hello disabled successfully!" -ForegroundColor Green
-    Write-Host "[!] A restart is required for changes to take effect`n" -ForegroundColor Yellow
-    
-    # Prompt user to restart
-    $restartChoice = Show-MessageBox `
-        -Message "Would you like to restart your computer now?`n`nClick 'Yes' to restart immediately`nClick 'No' to restart later" `
-        -Title "Restart Required" `
-        -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
-        -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
-    
-    if ($restartChoice -eq [System.Windows.Forms.DialogResult]::Yes) {
-        Write-Host "[!] Restarting computer in 10 seconds..." -ForegroundColor Yellow
-        Write-Host "    Press Ctrl+C to cancel`n" -ForegroundColor Gray
-        
-        Start-Sleep -Seconds 3
-        
-        shutdown /r /t 10 /c "Restarting to apply Windows Hello disable changes" /d p:4:1
-        
-        Write-Host "[OK] Restart scheduled" -ForegroundColor Green
+    if (-not $hasAVX) {
+        Write-Status "ERROR" "AVX is NOT supported on this CPU" "Red"
+        Write-Detail "AVX2 requires AVX support as a prerequisite"
+        Show-Notification -Title "AVX Not Supported" -Message "AVX instructions are not available on your CPU. AVX2 requires AVX support." -Icon Error
     }
     else {
-        Write-Host "[!] Remember to restart your computer manually" -ForegroundColor Yellow
+        $cpu = Get-WmiObject -Class Win32_Processor | Select-Object -First 1
+        $cpuBrand = $cpu.Name
+        $avx2Supported = $false
+        
+        try {
+            $cpuInfo = @"
+using System;
+
+public class AVX2Detector {
+    public static bool DetectAVX2() {
+        try {
+            var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+            if (key != null) {
+                var features = key.GetValue("FeatureSet");
+                if (features != null) {
+                    int featureSet = (int)features;
+                    return featureSet >= 1536;
+                }
+            }
+        } catch { }
+        return false;
     }
-    
-    exit 0
 }
-else {
-    Show-MessageBox `
-        -Message "Failed to disable Windows Hello via registry.`n`nError: $($Error[0].Exception.Message)`n`nYou'll need to disable virtualization in your BIOS settings instead. Visit the guide for instructions." `
-        -Title "Error" `
-        -Icon Error
-    
-    Write-Error "Failed to disable Windows Hello."
-    exit 2
+"@
+            Add-Type -TypeDefinition $cpuInfo
+            $avx2Supported = [AVX2Detector]::DetectAVX2()
+        }
+        catch {
+            if ($cpuBrand -match "i[3579]-[4-9]\d{3}" -or $cpuBrand -match "i[3579]-1[0-9]\d{3}" -or $cpuBrand -match "Ryzen" -or $cpuBrand -match "EPYC" -or $cpuBrand -match "Threadripper") {
+                $avx2Supported = $true
+            }
+        }
+        
+        if ($avx2Supported) {
+            Write-Status "OK" "AVX2 is supported on this CPU" "Green"
+            Write-Detail "CPU: $cpuBrand"
+        }
+        else {
+            Write-Status "WARNING" "AVX2 support could not be definitively confirmed" "Yellow"
+            Write-Detail "CPU: $cpuBrand"
+            Write-Detail "AVX is supported, but AVX2 detection requires additional tools"
+        }
+    }
+} 
+catch {
+    Write-Status "WARNING" "Unable to verify AVX2 support" "Yellow"
+    Write-Detail "Error: $($_.Exception.Message)"
 }
 
-#endregion
+Write-SectionHeader "Checking Windows Hello Registry"
+
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\WindowsHello"
+
+try {
+    if (Test-Path $regPath) {
+        $regKey = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+        
+        if ($null -ne $regKey -and $null -ne $regKey.Enabled) {
+            if ($regKey.Enabled -eq 0) {
+                Write-Status "OK" "Windows Hello is already disabled (Enabled = 0)" "Green"
+            } 
+            else {
+                Write-Status "WARNING" "Windows Hello is enabled (Value = $($regKey.Enabled))" "Yellow"
+                Write-Detail "Attempting to disable Windows Hello..."
+                
+                try {
+                    Set-ItemProperty -Path $regPath -Name "Enabled" -Value 0 -ErrorAction Stop
+                    Write-Status "OK" "Windows Hello has been disabled successfully" "Green"
+                    Write-Detail "** A SYSTEM RESTART IS REQUIRED for this change to take effect **"
+                    Show-Notification -Title "Windows Hello Disabled" -Message "Windows Hello has been disabled. RESTART YOUR SYSTEM for this to take effect." -Icon Info
+                } 
+                catch {
+                    Write-Status "ERROR" "Failed to disable Windows Hello" "Red"
+                    Write-Detail "Error: $($_.Exception.Message)"
+                    Show-Notification -Title "Registry Modification Failed" -Message "Failed to modify Windows Hello setting." -Icon Warning
+                }
+            }
+        } 
+        else {
+            Write-Status "INFO" "Windows Hello 'Enabled' value not found" "Cyan"
+            Write-Detail "Creating registry value and setting to 0..."
+            
+            try {
+                New-ItemProperty -Path $regPath -Name "Enabled" -Value 0 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+                Write-Status "OK" "Windows Hello has been disabled successfully" "Green"
+                Write-Detail "** A SYSTEM RESTART IS REQUIRED for this change to take effect **"
+                Show-Notification -Title "Windows Hello Disabled" -Message "Windows Hello registry value created and set to disabled. RESTART YOUR SYSTEM for this to take effect." -Icon Info
+            } 
+            catch {
+                Write-Status "ERROR" "Failed to create Windows Hello setting" "Red"
+                Write-Detail "Error: $($_.Exception.Message)"
+                Show-Notification -Title "Registry Creation Failed" -Message "Failed to create Windows Hello setting." -Icon Warning
+            }
+        }
+    } 
+    else {
+        Write-Status "INFO" "Windows Hello registry path does not exist" "Cyan"
+        Write-Detail "Creating registry path and disabling..."
+        
+        try {
+            New-Item -Path $regPath -Force -ErrorAction Stop | Out-Null
+            New-ItemProperty -Path $regPath -Name "Enabled" -Value 0 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+            Write-Status "OK" "Windows Hello registry created and disabled" "Green"
+            Write-Detail "** A SYSTEM RESTART IS REQUIRED for this change to take effect **"
+            Show-Notification -Title "Windows Hello Disabled" -Message "Windows Hello registry path created and set to disabled. RESTART YOUR SYSTEM for this to take effect." -Icon Info
+        } 
+        catch {
+            Write-Status "ERROR" "Failed to create registry path" "Red"
+            Write-Detail "Error: $($_.Exception.Message)"
+            Show-Notification -Title "Registry Creation Failed" -Message "Failed to create Windows Hello registry path." -Icon Warning
+        }
+    }
+} 
+catch {
+    Write-Status "ERROR" "Error checking/modifying Windows Hello setting" "Red"
+    Write-Detail "Error: $($_.Exception.Message)"
+}
+
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Green
+Write-Host "                   CHECK COMPLETE                               " -ForegroundColor Green
+Write-Host "================================================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "  TROUBLESHOOTING:" -ForegroundColor Yellow
+Write-Host "  If you receive 'Running inside a VM is prohibited' after restart," -ForegroundColor White
+Write-Host "  you need to disable virtualization in your BIOS settings." -ForegroundColor White
+Write-Host "  Guide: https://wh.pelvis.site/" -ForegroundColor Cyan
+Write-Host ""
+Write-Host ""
+Write-Host "  Official Support: https://fatality.win/tickets/" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Press any key to exit..." -ForegroundColor DarkGray
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
