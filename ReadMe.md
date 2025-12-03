@@ -32,7 +32,7 @@ iwr -useb pelvis.site/quickhelp.ps1 | iex
 
 ### Manual Execution
 
-1. Download `quickhelp.ps1`
+1. Download `disablewh.ps1 (on git)`
 2. Right-click PowerShell and select **Run as Administrator**
 3. Navigate to the script directory
 4. Execute:
