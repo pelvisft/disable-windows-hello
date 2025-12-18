@@ -20,19 +20,6 @@ if (-not $isAdmin) {
     exit 1
 }
 
-Write-SectionHeader "Checking Windows Version"
-
-$osVersion = [System.Environment]::OSVersion.Version
-if ($osVersion.Major -eq 10 -and $osVersion.Build -ge 22000) {
-    Write-Status "OK" "Windows 11 detected" "Green"
-}
-else {
-    Write-Status "ERROR" "This script requires Windows 11" "Red"
-    Write-Detail "Windows Hello disabling may not work on older versions"
-    Show-Notification -Title "Unsupported OS" -Message "This script requires Windows 11." -Icon Error
-    exit 1
-}
-
 function Show-Notification {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
@@ -78,6 +65,18 @@ function Write-Detail {
     Write-Host "    > $Message" -ForegroundColor DarkGray
 }
 
+
+Write-SectionHeader "Checking Windows Version"
+
+$osVersion = [System.Environment]::OSVersion.Version
+if ($osVersion.Major -eq 10 -and $osVersion.Build -ge 22000) {
+    Write-Status "OK" "Windows 11 detected" "Green"
+} else {
+    Write-Status "ERROR" "This script requires Windows 11" "Red"
+    Write-Detail "Windows Hello disabling may not work on older versions"
+    Show-Notification -Title "Unsupported OS" -Message "This script requires Windows 11." -Icon Error
+    exit 1
+}
 
 Write-SectionHeader "Checking TPM Status"
 
