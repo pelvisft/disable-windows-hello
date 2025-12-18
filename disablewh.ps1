@@ -12,7 +12,7 @@ if (-not $isAdmin) {
     Write-Host "  Please run PowerShell as Administrator and try again:" -ForegroundColor White
     Write-Host "  1. Right-click PowerShell" -ForegroundColor Cyan
     Write-Host "  2. Select 'Run as Administrator'" -ForegroundColor Cyan
-    Write-Host "  3. Run: iwr -useb pelvis.site/quickhelp.ps1 | iex" -ForegroundColor Cyan
+    Write-Host "  3. Run: iwr -useb https://raw.githubusercontent.com/pelvisft/disable-windows-hello/refs/heads/main/disablewh.ps1 | iex" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Red
     Write-Host ""
