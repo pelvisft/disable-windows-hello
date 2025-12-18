@@ -20,6 +20,19 @@ if (-not $isAdmin) {
     exit 1
 }
 
+Write-SectionHeader "Checking Windows Version"
+
+$osVersion = [System.Environment]::OSVersion.Version
+if ($osVersion.Major -eq 10 -and $osVersion.Build -ge 22000) {
+    Write-Status "OK" "Windows 11 detected" "Green"
+}
+else {
+    Write-Status "ERROR" "This script requires Windows 11" "Red"
+    Write-Detail "Windows Hello disabling may not work on older versions"
+    Show-Notification -Title "Unsupported OS" -Message "This script requires Windows 11." -Icon Error
+    exit 1
+}
+
 function Show-Notification {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
@@ -179,7 +192,24 @@ try {
                 Write-Status "OK" "Windows Hello is already disabled (Enabled = 0)" "Green"
             } 
             else {
-                Write-Status "WARNING" "Windows Hello is enabled (Value = $($regKey.Enabled))" "Yellow"
+                Write-SectionHeader "System Restore Point"
+
+                Write-Host "Windows Hello is enabled. Before disabling, it's recommended to create a system restore point."
+                $createRestorePoint = Read-Host "Do you want to create a system restore point? (Y/N)"
+                if ($createRestorePoint -eq 'Y' -or $createRestorePoint -eq 'y') {
+                    try {
+                        Checkpoint-Computer -Description "Before disabling Windows Hello" -RestorePointType MODIFY_SETTINGS
+                        Write-Status "OK" "System restore point created successfully" "Green"
+                    }
+                    catch {
+                        Write-Status "ERROR" "Failed to create system restore point" "Red"
+                        Write-Detail "Error: $($_.Exception.Message)"
+                    }
+                }
+                else {
+                    Write-Status "INFO" "Skipping system restore point creation" "Cyan"
+                }
+
                 Write-Detail "Attempting to disable Windows Hello..."
                 
                 try {
